@@ -1,0 +1,256 @@
+import uvm_pkg::*;
+`include "uvm_macros.svh"
+interface apb_intf(input logic clk,input logic reset);
+  logic psel;
+  logic [`addr_width-1:0]addr;
+  logic wrt_rd;
+  logic [`size-1:0]wdata;
+  logic [`size-1:0]out;
+  logic valid;
+  logic ready;
+  logic penable;
+  logic [`addr_width-1:0]add;
+endinterface
+
+class apb_tx extends uvm_sequence_item;
+  rand logic [`addr_width-1:0]add;
+  rand logic [`addr_width-1:0]addr;
+  rand logic wrt_rd;
+  rand logic [`size-1:0]wdata;
+  logic [`size-1:0]out;
+  `uvm_object_utils(apb_tx)
+  function new(string name="apb_seq");
+    super.new(name);
+  endfunction
+endclass
+
+class apb_seq extends uvm_sequence#(apb_tx);
+  `uvm_object_utils(apb_seq)
+  apb_tx req;
+  logic [`addr_width-1:0]addr_temp[9:0];
+  logic [`addr_width-1:0]add_temp[9:0];;
+function new(string name="apb_seq");
+    super.new(name);
+endfunction
+  task body();
+    for(int i=0;i<10;i++)begin
+      req=apb_tx::type_id::create("req");
+      start_item(req);
+      assert(req.randomize()with {req.wrt_rd==1;});
+      #35;
+      finish_item(req);
+      addr_temp[i]=req.addr;
+      add_temp[i]=req.add;
+    end
+    for(int i=0;i<10;i++)begin
+      req=apb_tx::type_id::create("req");
+      start_item(req);
+      assert(req.randomize()with {req.wrt_rd==0;req.addr==addr_temp[i];req.add==add_temp[i];});#35;
+      finish_item(req);
+    end
+  endtask
+endclass
+
+
+class apb_seqr extends uvm_sequencer#(apb_tx);
+  `uvm_component_utils(apb_seqr)
+  function new(string name="apb_seqr",uvm_component parent);
+    super.new(name,parent);
+  endfunction
+endclass
+
+class apb_driver extends uvm_driver#(apb_tx);
+  `uvm_component_utils(apb_driver)
+ virtual apb_intf vif;
+  apb_tx req;
+  function new(string name="apb_driver",uvm_component parent);
+    super.new(name,parent);
+  endfunction
+  
+  function void build_phase(uvm_phase phase);
+    super.build_phase(phase);
+    if(!uvm_config_db#(virtual apb_intf)::get(this,"","vif",vif))
+      `uvm_fatal("DRV","Virtual interface not found")
+  endfunction
+ task run_phase(uvm_phase phase);
+   forever begin
+     seq_item_port.get_next_item(req);
+     drive_tx(req);
+     seq_item_port.item_done();
+   end
+endtask
+    task drive_tx(apb_tx req);
+      @(posedge vif.clk);
+      vif.add<=req.add;
+      vif.addr<=req.addr;
+      vif.wrt_rd<=req.wrt_rd;
+      vif.wdata<=req.wdata;
+    endtask
+endclass    
+
+      class apb_monitor extends uvm_monitor;
+        `uvm_component_utils(apb_monitor)
+  virtual apb_intf vif;
+  apb_tx tx;
+        uvm_analysis_port #(apb_tx) mon_ap;
+        function new(string name="apb_monitor", uvm_component parent);
+    super.new(name,parent);
+    mon_ap = new("mon_ap", this);
+  endfunction
+  function void build_phase(uvm_phase phase);
+    super.build_phase(phase);
+    if(!uvm_config_db #(virtual apb_intf)::get(this,"","vif",vif))
+      `uvm_fatal("MON","Virtual interface not found")
+  endfunction
+  task run_phase(uvm_phase phase);
+    forever begin
+      @(posedge vif.clk);
+      if(vif.valid && vif.ready)begin
+        tx = apb_tx::type_id::create("tx");
+        tx.addr  = vif.addr;
+        tx.wdata  = vif.wdata;
+        tx.wrt_rd = vif.wrt_rd;
+        tx.out =vif.out;
+        tx.add = vif.add;
+        mon_ap.write(tx);
+   end
+    end
+  endtask
+endclass
+    
+class apb_agent extends uvm_agent;
+  `uvm_component_utils(apb_agent)
+  apb_seqr seqr;
+  apb_driver drv;
+  apb_monitor mon;
+  function new(string name="apb_agent",uvm_component parent);
+    super.new(name,parent);
+  endfunction
+  function void build_phase(uvm_phase phase);
+    super.build_phase(phase);
+    seqr=apb_seqr::type_id::create("seqr",this);
+    drv=apb_driver::type_id::create("drv",this);
+    mon=apb_monitor::type_id::create("mon",this);
+  endfunction
+  
+ function void connect_phase(uvm_phase phase);
+    super.connect_phase(phase);
+    drv.seq_item_port.connect(seqr.seq_item_export);
+ endfunction
+endclass
+    
+
+class apb_scoreboard extends uvm_scoreboard;
+ `uvm_component_utils(apb_scoreboard)
+  uvm_analysis_imp #(apb_tx, apb_scoreboard) sb_port;
+      logic [`size-1:0] mem1 [0:`depth-1];
+      logic [`size-1:0] mem2 [0:`depth-1];
+      function new(string name="apb_scoreboard", uvm_component parent);
+    super.new(name,parent);
+    sb_port = new("sb_port", this);
+  endfunction
+      function void write(apb_tx tx);
+        if((tx.add<32)) begin
+          if(tx.wrt_rd)begin
+            mem1[tx.addr] = tx.wdata;
+      `uvm_info("SB",$sformatf(
+        "WRITE addr=%0d data=%0d",tx.addr,tx.wdata),UVM_LOW)
+    end
+    else begin
+     if (mem1[tx.addr] == tx.out)
+        `uvm_info("SB",$sformatf(
+          "READ PASS addr=%0d data=%0d",tx.addr,tx.out),UVM_LOW)
+    end
+    end
+       else if((tx.add>32)) begin
+          if(tx.wrt_rd)begin
+            mem2[tx.addr] = tx.wdata;
+      `uvm_info("SB",$sformatf(
+        "WRITE addr=%0d data=%0d",tx.addr,tx.wdata),UVM_LOW)
+    end
+    else begin
+      if(mem2[tx.addr] == tx.out)
+        `uvm_info("SB",$sformatf(
+          "READ PASS addr=%0d data=%0d",tx.addr,tx.out),UVM_LOW)
+    end
+        end
+      else begin
+        `uvm_error("SB",$sformatf(
+          "READ FAIL addr=%0d exp1=%0d exp2=%0d got=%0d sel=%0d",
+          tx.addr, mem1[tx.addr],mem2[tx.addr],tx.out,tx.add))
+    end
+  endfunction
+endclass
+
+class apb_env extends uvm_env;
+          `uvm_component_utils(apb_env)
+          apb_agent agent;
+          apb_scoreboard sb;
+          function new(string name="apb_env",uvm_component parent);
+            super.new(name,parent);
+          endfunction
+          function void build_phase(uvm_phase phase);
+            super.build_phase(phase);
+            agent=apb_agent::type_id::create("agent",this);
+            sb=apb_scoreboard::type_id::create("sb",this);
+          endfunction
+           function void connect_phase(uvm_phase phase);
+            super.connect_phase(phase);
+           agent.mon.mon_ap.connect(sb.sb_port);
+          endfunction
+endclass
+        
+        class apb_test extends uvm_test;
+          `uvm_component_utils(apb_test)
+          apb_env env;
+          apb_seq seq;
+          function new(string name="apb_test",uvm_component parent);
+            super.new(name,parent);
+          endfunction
+          function void build_phase(uvm_phase phase);
+            super.build_phase(phase);
+            seq=apb_seq::type_id::create("seq");
+            env=apb_env::type_id::create("env",this);
+          endfunction
+         task run_phase(uvm_phase phase);
+          phase.raise_objection(this);
+         seq = apb_seq::type_id::create("seq");
+         seq.start(env.agent.seqr);
+         phase.drop_objection(this);
+        endtask
+        endclass
+module tb;
+  logic clk;
+  logic reset;
+  apb_intf pif(clk, reset);
+  apb_top duttb(
+    .reset (pif.reset),
+    .clk   (pif.clk),
+    .psel  (pif.psel),
+    .addr  (pif.addr),
+    .wrt_rd(pif.wrt_rd),
+    .wdata (pif.wdata),
+    .add(pif.add),
+    .out   (pif.out),
+    .valid(pif.valid),
+    .ready(pif.ready)
+  );
+  initial begin
+    clk = 0;
+    forever #5 clk = ~clk;
+  end
+  initial begin
+    reset = 1;
+    #20;
+    reset = 0;
+  end
+  initial begin
+    $dumpfile("dump.vcd");
+    $dumpvars(0, tb);
+  end
+  initial begin
+    uvm_config_db #(virtual apb_intf)::set(null, "*", "vif", pif);
+    run_test("apb_test");
+  end
+
+endmodule
