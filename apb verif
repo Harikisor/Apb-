@@ -14,7 +14,7 @@ endinterface
 
 class apb_tx extends uvm_sequence_item;
   rand logic [`addr_width-1:0]add;
-  rand logic [`addr_width-1:0]addr;
+  randc logic [`addr_width-1:0]addr;
   rand logic wrt_rd;
   rand logic [`size-1:0]wdata;
   logic [`size-1:0]out;
@@ -27,25 +27,42 @@ endclass
 class apb_seq extends uvm_sequence#(apb_tx);
   `uvm_object_utils(apb_seq)
   apb_tx req;
-  logic [`addr_width-1:0]addr_temp[9:0];
-  logic [`addr_width-1:0]add_temp[9:0];;
+  logic [`addr_width-1:0]addr_temp[128:0];
+  logic [`addr_width-1:0]add_temp[128:0];
+  logic [`addr_width-1:0]addr_temp1[128:0];
+  logic [`addr_width-1:0]add_temp1[128:0];
 function new(string name="apb_seq");
     super.new(name);
 endfunction
   task body();
-    for(int i=0;i<10;i++)begin
+    for(int i=0;i<128;i++)begin
       req=apb_tx::type_id::create("req");
       start_item(req);
-      assert(req.randomize()with {req.wrt_rd==1;});
+      assert(req.randomize()with {req.wrt_rd==1;add<32;});
       #35;
       finish_item(req);
       addr_temp[i]=req.addr;
       add_temp[i]=req.add;
     end
-    for(int i=0;i<10;i++)begin
+      for(int i=0;i<128;i++)begin
       req=apb_tx::type_id::create("req");
       start_item(req);
-      assert(req.randomize()with {req.wrt_rd==0;req.addr==addr_temp[i];req.add==add_temp[i];});#35;
+        assert(req.randomize()with {req.wrt_rd==1;add>31;});
+      #35;
+      finish_item(req);
+      addr_temp1[i]=req.addr;
+      add_temp1[i]=req.add;
+    end
+    for(int i=0;i<128;i++)begin
+      req=apb_tx::type_id::create("req");
+      start_item(req);
+      assert(req.randomize()with   {req.wrt_rd==0;req.addr==addr_temp[i];req.add==add_temp[i];});#35;
+      finish_item(req);
+    end
+     for(int i=0;i<128;i++)begin
+      req=apb_tx::type_id::create("req");
+      start_item(req);
+       assert(req.randomize()with   {req.wrt_rd==0;req.addr==addr_temp1[i];req.add==add_temp1[i];});#35;
       finish_item(req);
     end
   endtask
@@ -162,7 +179,7 @@ class apb_scoreboard extends uvm_scoreboard;
           "READ PASS addr=%0d data=%0d",tx.addr,tx.out),UVM_LOW)
     end
     end
-       else if((tx.add>32)) begin
+       else if((tx.add>31)) begin
           if(tx.wrt_rd)begin
             mem2[tx.addr] = tx.wdata;
       `uvm_info("SB",$sformatf(
@@ -181,11 +198,36 @@ class apb_scoreboard extends uvm_scoreboard;
     end
   endfunction
 endclass
-
+      
+  class apb_cov extends uvm_subscriber#(apb_tx);
+        `uvm_component_utils(apb_cov)
+        apb_tx tx;
+        covergroup apb_cg;
+          addr:coverpoint tx.addr{option.auto_bin_max=64;}
+          add:coverpoint tx.add{option.auto_bin_max=2;}
+          wrtrd:coverpoint tx.wrt_rd;
+          cross addr,add,wrtrd{option.weight=3;}
+        endgroup
+    function new(string name="apb_cov",uvm_component parent);
+          super.new(name,parent);
+           apb_cg=new();
+        endfunction
+    
+        function void write(apb_tx t);
+          tx = t;
+        apb_cg.sample();
+       endfunction
+    function void report_phase(uvm_phase phase);
+     super.report_phase(phase);
+      `uvm_info("COV", $sformatf("APB Coverage = %0.2f%%", apb_cg.get_coverage()),UVM_LOW)
+endfunction
+endclass
+      
 class apb_env extends uvm_env;
           `uvm_component_utils(apb_env)
           apb_agent agent;
           apb_scoreboard sb;
+          apb_cov cov;
           function new(string name="apb_env",uvm_component parent);
             super.new(name,parent);
           endfunction
@@ -193,10 +235,12 @@ class apb_env extends uvm_env;
             super.build_phase(phase);
             agent=apb_agent::type_id::create("agent",this);
             sb=apb_scoreboard::type_id::create("sb",this);
+            cov=apb_cov::type_id::create("cov",this);
           endfunction
            function void connect_phase(uvm_phase phase);
             super.connect_phase(phase);
            agent.mon.mon_ap.connect(sb.sb_port);
+             agent.mon.mon_ap.connect(cov.analysis_export);
           endfunction
 endclass
         
@@ -219,6 +263,9 @@ endclass
          phase.drop_objection(this);
         endtask
         endclass
+      
+    
+        
 module tb;
   logic clk;
   logic reset;
