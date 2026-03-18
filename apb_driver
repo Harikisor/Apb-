@@ -1,1 +1,28 @@
-
+class apb_driver extends uvm_driver#(apb_tx);
+  `uvm_component_utils(apb_driver)
+  virtual apb_intf vif;
+  function new(string name="apb_driver",uvm_component parent);
+    super.new(name,parent);
+  endfunction
+  function void build_phase(uvm_phase phase);
+    super.build_phase(phase);
+    if(!uvm_config_db #(virtual apb_intf)::get(this,"","vif",vif))
+       `uvm_fatal("DRV","Interface not found")
+  endfunction
+  task run_phase(uvm_phase phase);
+    apb_tx tx;
+    forever begin
+      seq_item_port.get_next_item(tx);
+      drive_tx(tx);
+      seq_item_port.item_done();
+    end
+  endtask
+    task drive_tx(apb_tx tx);
+      repeat(3)@(posedge vif.clk);
+      vif.wrtrd<=tx.wrtrd;
+      vif.wdata<=tx.wdata;
+      vif.addr<=tx.addr;
+      vif.valid<=tx.valid;
+    endtask
+    endclass
+  
