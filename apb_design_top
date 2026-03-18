@@ -1,0 +1,79 @@
+
+module top(
+input valid,
+  input [`addr_width-1:0]addr,
+  input reset,
+  input clk,
+  input wrtrd,
+  input [`size-1:0]wdata,
+  output [`size-1:0]out,
+  output reg[1:0]s,
+  output reg[1:0]ns
+);
+  wire [1:0]state,next_state;
+  wire ready_out,valid_out,psel,psel1,penable,wrtrd_out,ready1,ready2;
+  wire [`size-1:0]rdata,rout,wdata_out,rdata1,rdata2;
+  wire[`addr_width-1:0]addr_out;
+  apbmaster dut(
+    .valid(valid),
+    .addr(addr),
+    .wdata(wdata),
+    .reset(reset),
+    .clk(clk),
+    .wrtrd(wrtrd),
+    .ready(ready_out),
+    .rdata(rdata),
+    .valid_out(valid_out),
+    .addr_out(addr_out),
+    .rout(rout),
+    .wdata_out(wdata_out),
+    .wrtrd_out(wrtrd_out),
+    .psel(psel),
+    .psel1(psel1),
+    .penable(penable),
+    .s(state),
+    .ns(next_state));
+  mem_mod dut1
+(
+  .wrtrd_en(wrtrd_out),
+  .clk(clk),
+  .reset(reset),
+  .psel(psel),
+  .penable(penable),
+  .add(addr_out),
+  .data(wdata_out),
+  .out(rdata1),
+  .ready(ready1)
+);
+  mem_mod1 dut2
+(
+  .wrtrd_en(wrtrd_out),
+  .clk(clk),
+  .reset(reset),
+  .psel(psel1),
+  .penable(penable),
+  .add(addr_out),
+  .data(wdata_out),
+  .out(rdata2),
+  .ready(ready2)
+);
+  mux dut3(
+    .ready1(ready1),
+    .ready2(ready2),
+    .rdata1(rdata1),
+    .rdata2(rdata2),
+    .psel(psel),
+    .psel1(psel1),
+    .ready(ready_out),
+    .rdata(rdata)
+);
+  assign out=rdata;
+  always@(*)begin
+  s=state;
+  ns=next_state;
+  end
+  initial begin
+    $dumpfile("dump.vcd");
+    $dumpvars;
+  end
+endmodule
