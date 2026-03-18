@@ -1,1 +1,11 @@
-
+class apb_tx extends uvm_sequence_item;
+  rand logic wrtrd;
+  rand logic [`size-1:0]wdata;
+  rand logic [`addr_width-1:0]addr;
+  rand logic valid;
+  logic [`size-1:0]out;
+  `uvm_object_utils(apb_tx)
+  function new(string name="apb_tx");
+    super.new(name);
+  endfunction
+endclass
