@@ -1,179 +1,287 @@
-`define size 8
 `define depth 64
+`define size 16
 `define addr_width $clog2(`depth)
-module apb_master(
-  input [`addr_width-1:0]add,//from soc
-  output psel,
+module apbmaster(
+  input valid,
+  input [`addr_width-1:0]addr,
+  input [`size-1:0]wdata,
   input reset,
   input clk,
-  input [`addr_width-1:0]addr,
-  input wrt_rd,
-  input[`size-1:0]wdata,
-  input [`size-1:0]rdata,
+  input wrtrd,
   input ready,
+  input [`size-1:0]rdata,
+  output reg valid_out,
+  output reg [`addr_width-1:0]addr_out,
   output reg [`size-1:0]rout,
-  output reg reset_out,
+  output reg [`size-1:0]wdata_out,
+  output reg wrtrd_out,
+  output reg psel,
+  output reg psel1,
   output reg penable,
-  output reg[`addr_width-1:0]addr_out,
-  output reg wrt_rd_out,
-  output reg[`size-1:0]wdata_out,
-  output reg valid,
-  output reg psel_out);
-  reg valid_d;
-  assign psel=(add>31)?1:0;
-  always@(posedge clk)begin
-  valid_d<=valid;
-  penable<=valid_d;
-  reset_out<=reset;
-  wrt_rd_out<=wrt_rd;
-   psel_out<=psel; 
-    if(reset)begin
-      rout<=0;
-      wdata_out<=0;
-      addr_out<=0;
-      valid<=0;
-      psel_out<=0;
-    end
-    else begin
-      if(!valid && wrt_rd)begin
-      rout<=0;
-      wdata_out<=wdata;
-      addr_out<=addr;
-      valid<=1;
-      end
-      else if(!valid && !wrt_rd)begin
-      rout<=rdata;
-      wdata_out<=wdata;
-      addr_out<=addr;
-      valid<=1;
-      
-      end
-      else if(valid && ready && penable)begin
-        valid<=0;
-      end
-    end
-  end
-endmodule
-  
-module apb_mux(input psel,
-               input[`size-1:0]rdata1,
-               input [`size-1:0]rdata2,
-               input ready1,
-               input ready2,
-               output reg ready_out,
-               output reg [`size-1:0]rdata_out);
+  output reg [1:0] s,
+  output reg [1:0] ns
+);
+  reg [1:0]state,next_state;
+  reg  [`addr_width-1:0]addr_reg;
+  localparam IDLE=2'b00,SETUP=2'b01,ACCESS=2'b10;
   always@(*)begin
-    case(psel)
-      0:begin rdata_out=rdata1;ready_out=ready1  ;end
-        1:begin rdata_out=rdata2;ready_out=ready2 ;end
+    next_state = state;
+    case(state)
+      IDLE:begin
+        if(valid)begin
+          next_state=SETUP;
+        end
+        else begin
+          next_state=IDLE;
+        end
+      end
+      SETUP:
+          next_state=ACCESS;
+      ACCESS:begin
+        if(!ready)begin
+          next_state=ACCESS;
+        end
+      else if(ready && valid)begin
+          next_state=SETUP;
+      end
+      else if(ready && !valid)begin
+          next_state=IDLE;
+      end
+      end
     endcase
   end
+  always@(posedge clk)begin
+    if(reset)begin
+      state<=IDLE;  
+    end
+    else
+      state<=next_state;
+  end
+  always@(*)begin 
+     valid_out=valid;
+     wdata_out=wdata;
+     psel=0;
+     psel1=0; 
+     penable=0;
+     wrtrd_out=wrtrd;
+    addr_out=addr_reg;
+    case(state)
+      IDLE:begin
+        psel=0;
+        psel1=0;
+        penable=0;
+      end
+      SETUP:begin
+        wdata_out=wdata;
+        valid_out=valid;
+        psel=(addr_reg<32);
+        psel1=(addr_reg>31);
+        penable=0;
+      end
+      ACCESS:begin
+        psel  = (addr_reg<32);
+        psel1 = (addr_reg>31);
+        penable=1;
+      end
+    endcase
+    s=state;
+    ns=next_state;
+  end
+    always @(posedge clk) begin
+    if(reset)
+        rout <= 0;
+    else if(state == ACCESS && !wrtrd && ready)
+        rout <= rdata;
+    end
+  always @(posedge clk) begin
+    if(reset)
+        addr_reg <= 0;
+    else if((state == IDLE && valid==1)||(state == SETUP && ready && valid))
+        addr_reg <= addr;
+end
 endmodule
-  
+
+
+module mem_mod
+(
+  input  logic                 wrtrd_en,
+  input  logic                 clk,
+  input  logic                 reset,
+  input logic                  psel,
+  input  logic                 penable,
+  input  logic [`addr_width-1:0] add,
+  input  logic [`size-1:0]      data,
+  output logic [`size-1:0]      out,
+  output logic                 ready
+);
+
+  logic [`size-1:0] mem [0:`depth-1];
+
+  always_ff @(posedge clk) begin
+    if (reset) begin
+      for (int i=0; i<`depth; i++) mem[i] <= '0;
+      out   <= '0;
+      ready <= 1'b0;
+    end else begin
+        if(psel)begin
+        ready <= 1'b1;
+        if (wrtrd_en&&penable) begin
+          mem[add] <= data;
+          out <= '0;
+        end else if (!wrtrd_en &&penable) begin
+          out <= mem[add];
+        end
+        end
+    else begin
+      ready <= 1'b0;
+      end  
+    end
+  end
+
+endmodule
+
+
 module mem_mod1
-  #(parameter int size=`size,
-    parameter int depth=`depth,
-    parameter int add_width=`addr_width)
-  (
+(
   input  logic                 wrtrd_en,
-  input  logic                 valid,
   input  logic                 clk,
   input  logic                 reset,
-  input  logic [add_width-1:0] add,
-  input  logic [size-1:0]      data,
-  output logic [size-1:0]      out,
-  output logic                 ready,
-   input logic penable,
-  input psel);
+  input logic                  psel,
+  input  logic                 penable,
+  input  logic [`addr_width-1:0] add,
+  input  logic [`size-1:0]      data,
+  output logic [`size-1:0]      out,
+  output logic                 ready
+);
 
-  logic [size-1:0] mem [0:depth-1];
+  logic [`size-1:0] mem [0:`depth-1];
 
   always_ff @(posedge clk) begin
-  
     if (reset) begin
-      for (int i=0; i<depth; i++) 
-      mem[i] <= '0;
+      for (int i=0; i<`depth; i++) mem[i] <= '0;
       out   <= '0;
       ready <= 1'b0;
-    end else  begin
+    end else begin
       ready <= 1'b0;
-      if (valid && !psel) begin
+        if(psel)begin
         ready <= 1'b1;
-        if (wrtrd_en && penable) begin
+          if (wrtrd_en &&penable) begin
           mem[add] <= data;
-          $display("w_out is %d",mem[add]);
           out <= '0;
-        end else if(!wrtrd_en && penable)begin
+          end else if (!wrtrd_en &&penable)begin
           out <= mem[add];
-          $display("r_out is %d",out);
         end
+        end
+      else begin
+      ready <= 1'b0;
       end
     end
   end
 endmodule
 
-module mem_mod2
-  #(parameter int size=`size,
-    parameter int depth=`depth,
-    parameter int add_width=`addr_width)
-  (
-  input  logic                 wrtrd_en,
-  input  logic                 valid,
-  input  logic                 clk,
-  input  logic                 reset,
-  input  logic [add_width-1:0] add,
-  input  logic [size-1:0]      data,
-  output logic [size-1:0]      out,
-  output logic                 ready,
-   input logic penable,
-  input logic psel);
-
-  logic [size-1:0] mem [0:depth-1];
-
-  always_ff @(posedge clk) begin
-  
-    if (reset) begin
-      for (int i=0; i<depth; i++) 
-      mem[i] <= '0;
-      out   <= '0;
-      ready <= 1'b0;
-    end else  begin
-      ready <= 1'b0;
-      if (valid && psel) begin
-        ready <= 1'b1;
-        if (wrtrd_en && penable) begin
-          mem[add] <= data;
-          $display("w_out is %d",mem[add]);
-          out <= '0;
-        end else if(!wrtrd_en && penable)begin
-          out <= mem[add];
-          $display("r_out is %d",out);
-        end
-      end
+module mux(
+  input ready1,
+  input ready2,
+  input[`size-1:0] rdata1,
+  input[`size-1:0] rdata2,
+  input psel,
+  input psel1,
+  output reg ready,
+  output reg [`size-1:0] rdata
+);
+  always@(*)begin
+ case({psel, psel1})
+    2'b10: begin
+        ready = ready1; 
+        rdata = rdata1;
     end
+    2'b01: begin
+        ready = ready2;
+        rdata = rdata2;
+    end
+    default: begin
+        ready = 0;
+        rdata = 0;
+    end
+  endcase
+end
+endmodule
+
+module top(
+input valid,
+  input [`addr_width-1:0]addr,
+  input reset,
+  input clk,
+  input wrtrd,
+  input [`size-1:0]wdata,
+  output [`size-1:0]out,
+  output reg[1:0]s,
+  output reg[1:0]ns
+);
+  wire [1:0]state,next_state;
+  wire ready_out,valid_out,psel,psel1,penable,wrtrd_out,ready1,ready2;
+  wire [`size-1:0]rdata,rout,wdata_out,rdata1,rdata2;
+  wire[`addr_width-1:0]addr_out;
+  apbmaster dut(
+    .valid(valid),
+    .addr(addr),
+    .wdata(wdata),
+    .reset(reset),
+    .clk(clk),
+    .wrtrd(wrtrd),
+    .ready(ready_out),
+    .rdata(rdata),
+    .valid_out(valid_out),
+    .addr_out(addr_out),
+    .rout(rout),
+    .wdata_out(wdata_out),
+    .wrtrd_out(wrtrd_out),
+    .psel(psel),
+    .psel1(psel1),
+    .penable(penable),
+    .s(state),
+    .ns(next_state));
+  mem_mod dut1
+(
+  .wrtrd_en(wrtrd_out),
+  .clk(clk),
+  .reset(reset),
+  .psel(psel),
+  .penable(penable),
+  .add(addr_out),
+  .data(wdata_out),
+  .out(rdata1),
+  .ready(ready1)
+);
+  mem_mod1 dut2
+(
+  .wrtrd_en(wrtrd_out),
+  .clk(clk),
+  .reset(reset),
+  .psel(psel1),
+  .penable(penable),
+  .add(addr_out),
+  .data(wdata_out),
+  .out(rdata2),
+  .ready(ready2)
+);
+  mux dut3(
+    .ready1(ready1),
+    .ready2(ready2),
+    .rdata1(rdata1),
+    .rdata2(rdata2),
+    .psel(psel),
+    .psel1(psel1),
+    .ready(ready_out),
+    .rdata(rdata)
+);
+  assign out=rdata;
+  always@(*)begin
+  s=state;
+  ns=next_state;
+  end
+  initial begin
+    $dumpfile("dump.vcd");
+    $dumpvars;
   end
 endmodule
-
-module apb_top(input reset,
-              input clk,output psel,
-              input [`addr_width-1:0]addr,
-              input wrt_rd,
-              input [`size-1:0]wdata,
-               input [`addr_width-1:0]add,
-               output [`size-1:0]out,
-               output valid,
-              output ready);
-  wire en;
-  wire  [`addr_width-1:0] addr_out;
-  wire  [`size-1:0]  data,wdata_out,rdata_out;
-  wire  [`size-1:0]  out1,out2,out3;
-  wire   ready1,ready2;
-  wire s_psel;
-  wire  penable; 
-  apb_master dut(add,psel,reset,clk,addr,wrt_rd,wdata,out3,ready,rdata_out,reset_out,penable,addr_out,en,wdata_out,valid,s_psel);
-  apb_mux dut3(psel,out1,out2,ready1,ready2,ready,out3);
-  mem_mod1 dut1(en,valid,clk,reset,addr_out,wdata_out,out1,ready1,penable,s_psel);
-  mem_mod2 dut2(en,valid,clk,reset,addr_out,wdata_out,out2,ready2,penable,s_psel);
-assign out=out3;
-endmodule
-
