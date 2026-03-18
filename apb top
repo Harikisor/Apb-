@@ -1,28 +1,5 @@
 
 
-class apb_seq extends uvm_sequence#(apb_tx);
-  `uvm_object_utils(apb_seq)
-  apb_tx tx;
-  logic [`addr_width-1:0]addr_temp[9:0];
-  function new(string name="apb_seq");
-    super.new(name);
-  endfunction
-  task body();
-    for(int i=0;i<10;i++)begin
-    tx=apb_tx::type_id::create("tx");
-    start_item(tx);
-      assert(tx.randomize()with {addr<32;wrtrd==1;valid==1;});
-      addr_temp[i]=tx.addr;
-    finish_item(tx);
-    end
-    for(int i=0;i<10;i++)begin
-    tx=apb_tx::type_id::create("tx");
-    start_item(tx);
-      assert(tx.randomize()with {addr==addr_temp[i];wrtrd==0;valid==1;});
-    finish_item(tx);
-    end
-  endtask
-endclass
 
 class apb_driver extends uvm_driver#(apb_tx);
   `uvm_component_utils(apb_driver)
