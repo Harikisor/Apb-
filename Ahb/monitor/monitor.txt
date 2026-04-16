@@ -1,0 +1,40 @@
+class ahb_monitor extends uvm_monitor;
+  `uvm_component_utils(ahb_monitor)
+  virtual ahb_intf vif;
+  uvm_analysis_port #(ahb_tx) item_collected_port;
+
+  function new(string name, uvm_component parent);
+    super.new(name, parent);
+    item_collected_port = new("item_collected_port", this);
+  endfunction
+
+  function void build_phase(uvm_phase phase);
+    uvm_config_db#(virtual ahb_intf)::get(this, "", "vif", vif);
+  endfunction
+  logic [9:0]add_temp;
+  logic[`size-1:0]data;
+  logic write;
+  task run_phase(uvm_phase phase);
+    ahb_tx tx;
+    forever begin
+      @(posedge vif.clk);
+      if (vif.ready && (vif.htrans == 2'b10 || vif.htrans == 2'b11)) begin
+        tx = ahb_tx::type_id::create("tx");
+        add_temp<=vif.o_haddr;
+        tx.add =add_temp;
+        tx.addr=vif.o_haddr;
+        //data <= vif.o_hwdata;
+        tx.wdata = vif.o_hwdata;
+        write <= vif.o_hwrite;
+        tx.write = write;
+        // tx.rdata =datar;
+        tx.htrans = vif.htrans;
+        tx.hsize  = vif.hsize;
+        tx.burst  = vif.burst;
+        tx.ready  = vif.ready;
+        tx.rdata  = vif.o_hrdata;
+        item_collected_port.write(tx);
+      end
+    end
+  endtask
+endclass

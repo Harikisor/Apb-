@@ -1,0 +1,1 @@
+It is used to create environment and seq and this is where the seq_item are randomized 

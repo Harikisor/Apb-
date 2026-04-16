@@ -1,0 +1,1 @@
+It is used to find the how many possibilities have been covered in testing

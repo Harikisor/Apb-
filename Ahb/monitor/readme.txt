@@ -1,0 +1,1 @@
+It is used to monitor and sample the signals between DUT and driver 

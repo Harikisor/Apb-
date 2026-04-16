@@ -1,0 +1,7 @@
+interface ahb_intf(input logic clk, input logic reset);
+  logic ready, write, start, valid, o_hwrite;
+  logic [2:0] burst, hsize;
+  logic [9:0] addr, o_haddr;
+  logic [31:0] wdata, o_hwdata, o_hrdata;
+  logic [1:0] htrans;
+endinterface

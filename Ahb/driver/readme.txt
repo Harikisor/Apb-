@@ -1,0 +1,1 @@
+It is used to drive signal from sequencer to dut

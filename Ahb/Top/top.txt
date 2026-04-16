@@ -1,0 +1,101 @@
+module top(
+  input clk,
+  input reset,
+  input write,
+  input [2:0] burst,
+  input [`addr_width-1:0] addr,
+  input [`size-1:0] wdata,
+  input [2:0] hsize,
+  input start
+);
+  wire [`size-1:0] o_hwdata;
+  wire [`size-1:0] o_hrdata;
+
+  wire [`size-1:0] rdata;
+  wire [`size-1:0] rdata1;
+  wire [`size-1:0] rdata_out;
+
+  wire [3:0] o_hburst;
+  wire [2:0] o_hsize;
+  wire o_hwrite;
+  wire [`addr_width-1:0] o_haddr;
+  wire [1:0] htrans;
+
+  wire valid;
+
+  wire ready;
+  wire ready1;
+  wire ready_out;
+
+  wire psel;
+  wire psel1;
+  wire sel;
+
+  ahb_master a1(
+    .clk(clk),
+    .reset(reset),
+    .ready(ready_out),
+    .write(write),
+    .burst(burst),
+    .addr(addr),
+    .wdata(wdata),
+    .rdata(rdata_out),
+    .hsize(hsize),
+    .start(start),
+    .o_hwdata(o_hwdata),
+    .o_hrdata(o_hrdata),
+    .o_hburst(o_hburst),
+    .o_hsize(o_hsize),
+    .o_hwrite(o_hwrite),
+    .o_haddr(o_haddr),
+    .htrans(htrans),
+    .valid(valid)
+  );
+
+  mem_mod a2(
+    .wrtrd_en(o_hwrite),
+    .clk(clk),
+    .reset(reset),
+    .psel(psel),
+    .valid(valid),
+    .add(o_haddr),
+    .data(o_hwdata),
+    .out(rdata),
+    .ready(ready),
+    .htrans(htrans)
+  );
+
+
+  mem_mod1 a3(
+    .wrtrd_en(o_hwrite),
+    .clk(clk),
+    .reset(reset),
+    .psel(psel1),
+    .valid(valid),
+    .add(o_haddr),
+    .data(o_hwdata),
+    .out(rdata1),
+    .ready(ready1),
+    .htrans(htrans)
+  );
+
+ 
+  decoder a4(
+    .addr(o_haddr),
+    .psel(psel),
+    .psel1(psel1),
+    .mux_sel(sel)
+  );
+
+  mux a5(
+    .data(rdata),      // mem0 output
+    .data1(rdata1),     // mem1 output
+    .sel(sel),
+    .ready(ready),
+    .ready1(ready1),
+    .data_out(rdata_out),
+    .ready_out(ready_out)
+  );
+ 
+  
+endmodule

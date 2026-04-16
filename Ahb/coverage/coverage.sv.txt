@@ -1,0 +1,54 @@
+ class ahb_cov extends uvm_subscriber#(ahb_tx);
+      `uvm_component_utils(ahb_cov)
+        ahb_tx tx;
+        covergroup ahb_cg;
+  addr: coverpoint tx.addr {
+    bins low_mem  = {[0:511]};
+    bins high_mem = {[512:1023]};
+  }
+  wrtrd: coverpoint tx.write;
+  burst_cp: coverpoint tx.burst {
+    bins single  = {3'b000};
+    bins incr    = {3'b001};
+    bins wrap4   = {3'b010};
+    bins incr4   = {3'b011};
+    bins wrap8   = {3'b100};
+    bins incr8   = {3'b101};
+    bins wrap16  = {3'b110};
+    bins incr16  = {3'b111};
+  }
+  htrans_cp: coverpoint tx.htrans {
+    bins IDLE   = {2'b00};
+    bins NONSEQ = {2'b10};
+    bins SEQ    = {2'b11};
+  }
+  size_cp: coverpoint tx.hsize {
+    bins BYTE  = {3'b000};
+    bins half  = {3'b001};
+    bins word  = {3'b010};
+  }
+  ready_cp: coverpoint tx.ready {
+    bins ready_0 = {0};
+    bins ready_1 = {1};
+  }
+  cross addr, wrtrd;
+  cross burst_cp, size_cp;
+  cross htrans_cp, ready_cp;
+  cross burst_cp, addr;
+  cross addr, wrtrd, burst_cp;
+
+endgroup
+      function new(string name="ahb_cov",uvm_component parent);
+          super.new(name,parent);
+           ahb_cg=new();
+        endfunction
+    
+      function void write(ahb_tx t);
+          tx = t;
+        ahb_cg.sample();
+       endfunction
+    function void report_phase(uvm_phase phase);
+     super.report_phase(phase);
+      `uvm_info("COV", $sformatf("AhB Coverage = %0f%%", ahb_cg.get_coverage()),UVM_LOW)
+endfunction
+endclass    
