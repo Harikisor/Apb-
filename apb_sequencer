@@ -1,7 +1,0 @@
-class apb_seqr extends uvm_sequencer#(apb_tx);
-  `uvm_component_utils(apb_seqr)
-  apb_tx tx;
-  function new(string name="apb_seqr",uvm_component parent);
-    super.new(name,parent);
-  endfunction
-endclass
