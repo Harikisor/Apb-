@@ -1,1 +1,0 @@
-It is used to verify the correctness of the DUT. 

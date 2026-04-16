@@ -1,1 +1,0 @@
-It is the top module used to connect the master,slave,decoder,mux

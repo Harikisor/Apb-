@@ -1,1 +1,0 @@
-It is used to control signal which are used to perform read,write operations in slave

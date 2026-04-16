@@ -1,1 +1,0 @@
-These are the components which are controlled by Master

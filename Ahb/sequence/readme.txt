@@ -1,1 +1,0 @@
-It is used to generate sequence of inputs 
