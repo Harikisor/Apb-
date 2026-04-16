@@ -1,1 +1,0 @@
-It is used tell the % of all read and write cases. 

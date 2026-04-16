@@ -1,1 +1,0 @@
-It is used to connect agent and functional coverage and Scoreboard. In connect phase monitor and scoreboard are connected

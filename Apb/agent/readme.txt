@@ -1,1 +1,0 @@
-It is used to connect driver, sequencer ,sequence and monitor in TB.
