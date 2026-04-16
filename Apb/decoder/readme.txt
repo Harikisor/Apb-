@@ -1,0 +1,1 @@
+It is used to decode which slave to select 

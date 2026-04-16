@@ -1,0 +1,32 @@
+  `uvm_component_utils(ahb_driver)
+  virtual ahb_intf vif;
+
+  function new(string name, uvm_component parent); super.new(name, parent); endfunction
+
+  function void build_phase(uvm_phase phase);
+    if(!uvm_config_db#(virtual ahb_intf)::get(this, "", "vif", vif)) `uvm_fatal("DRV", "NO VIF")
+  endfunction
+
+  task run_phase(uvm_phase phase);
+    vif.start <= 0; vif.write <= 0; vif.addr <= 0; vif.wdata <= 0;
+    wait(!vif.reset);
+    forever begin
+      seq_item_port.get_next_item(req);
+      drive_tx(req);
+      seq_item_port.item_done();
+    end
+  endtask
+
+  task drive_tx(ahb_tx tx);
+    @(posedge vif.clk);
+    vif.addr <= tx.addr; vif.write <= tx.write; vif.wdata <= tx.wdata;
+    vif.start <= 1;
+    @(posedge vif.clk);
+    vif.start <= 0;
+    repeat(2) @(posedge vif.clk);
+    while(!vif.ready) @(posedge vif.clk);
+    if(!tx.write) @(posedge vif.clk);
+  endtask
+endclass
+
+// ========

@@ -1,0 +1,1 @@
+These are the signals used to in dut and connects top testbench environment and DUT 

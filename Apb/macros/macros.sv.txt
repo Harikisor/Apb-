@@ -1,0 +1,3 @@
+`define depth 64
+`define size 16
+`define addr_width $clog2(`depth)
